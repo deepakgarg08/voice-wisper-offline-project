@@ -4,6 +4,38 @@ Hold Right Ctrl to record, release to transcribe with whisper.cpp and type the
 result into whatever window has focus. Works on Fedora KDE regardless of
 whether the session is X11 or Wayland.
 
+## Current status (checkpoint 2)
+
+**What works right now, verified on this machine:**
+- Transcription pipeline (whisper.cpp `whisper-cli` → clean text) — tested
+  end-to-end against `samples/jfk.wav`, passes automated tests.
+- All error paths (missing model, missing whisper-cli, ydotool not installed,
+  keyboard permission denied) raise clear, correct messages — verified by
+  running the app and by the test suite.
+- `ydotool`/`ydotoold` are installed and the daemon is running.
+
+**What's still blocking a full end-to-end run (mic → type):**
+- Your user is **not yet in the `input` group**, so `evdev` can't open
+  `/dev/input/eventN` to detect Right Ctrl. Running `python3 run.py` fails
+  immediately with a clear "permission denied, add yourself to input group"
+  error — this is expected, not a bug.
+- The `ydotoold` socket at `/tmp/.ydotool_socket` is still `root:root 0600`,
+  so even once the hotkey works, typing would fail until its permissions are
+  fixed.
+- Both require a one-time `sudo` step — see **One-time system setup** below,
+  or just run `./setup_and_run.sh`, which checks for and fixes both.
+
+**Workflow once setup is complete:**
+```
+hold Right Ctrl → mic records → release Right Ctrl → whisper.cpp transcribes
+→ ydotool types the result into whatever window has focus
+```
+
+**Quickest way to get running:** `./setup_and_run.sh` from this directory —
+it creates the venv, installs Python deps, checks/fixes the two `sudo`
+prerequisites above (asking for your password explicitly, only for those
+two steps), and then runs the app.
+
 ## How it works
 
 - **Hotkey detection** reads raw kernel input events from `/dev/input/eventN`
