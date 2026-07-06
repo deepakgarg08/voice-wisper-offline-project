@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
+from pathlib import Path
 
 from .utils import TypingBackendUnavailableError
 
@@ -18,7 +20,12 @@ class TextTyper:
     back to X11. ydotool works either way with no code changes.
     """
 
-    def __init__(self, backend: str = "ydotool", key_delay_ms: int = 0) -> None:
+    def __init__(
+        self,
+        backend: str = "ydotool",
+        key_delay_ms: int = 0,
+        socket_path: Path | None = None,
+    ) -> None:
         if backend != "ydotool":
             raise TypingBackendUnavailableError(f"Unsupported typing backend: {backend}")
 
@@ -28,6 +35,7 @@ class TextTyper:
             )
 
         self._key_delay_ms = key_delay_ms
+        self._socket_path = socket_path
 
     def type_text(self, text: str) -> None:
         """Type the given text at the current cursor/focus position."""
@@ -36,10 +44,15 @@ class TextTyper:
             command += ["--key-delay", str(self._key_delay_ms)]
         command += ["--", text]
 
+        env = os.environ.copy()
+        if self._socket_path is not None:
+            env["YDOTOOL_SOCKET"] = str(self._socket_path)
+
         try:
-            subprocess.run(command, check=True, capture_output=True, text=True)
+            subprocess.run(command, check=True, capture_output=True, text=True, env=env)
         except subprocess.CalledProcessError as exc:
             raise TypingBackendUnavailableError(
-                "ydotool failed to type text. Is the ydotoold daemon running? "
+                "ydotool failed to type text. Is the ydotoold daemon running, and is "
+                f"its socket ({self._socket_path or 'default path'}) readable by your user? "
                 f"Details: {exc.stderr.strip()}"
             ) from exc

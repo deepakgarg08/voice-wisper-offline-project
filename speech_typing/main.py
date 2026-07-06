@@ -38,6 +38,7 @@ class SpeechTypingApp:
         self._typer = TextTyper(
             backend=config.TYPING_BACKEND,
             key_delay_ms=config.YDOTOOL_KEY_DELAY_MS,
+            socket_path=config.YDOTOOL_SOCKET,
         )
 
         self._devices = find_hotkey_capable_devices(config.HOTKEY)

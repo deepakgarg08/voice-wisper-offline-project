@@ -34,6 +34,10 @@ LANGUAGE = "en"  # or "auto" to auto-detect the spoken language
 # --- typing ---
 TYPING_BACKEND = "ydotool"  # injects input via uinput; works on X11 and Wayland
 YDOTOOL_KEY_DELAY_MS = 0  # per-keystroke delay in ms, 0 = ydotool's own default
+# ydotoold's default socket path; the ydotool client's own compiled-in default
+# (/run/user/<uid>/.ydotool_socket) doesn't match this, so it must be passed
+# explicitly rather than relying on the client's guess.
+YDOTOOL_SOCKET = Path("/tmp/.ydotool_socket")
 
 # --- hotkey ---
 HOTKEY = "KEY_RIGHTCTRL"  # evdev key name; hold to record, release to stop

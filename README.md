@@ -22,26 +22,39 @@ whether the session is X11 or Wayland.
    sudo dnf install ydotool
    ```
 2. Start `ydotoold` (the daemon that actually injects input) so it's running
-   whenever you use this app:
+   whenever you use this app. On Fedora it ships as a **system** unit named
+   `ydotool.service` (not a `--user` unit):
    ```
-   systemctl --user enable --now ydotool
+   sudo systemctl enable --now ydotool.service
    ```
-   If that unit name doesn't exist on your install, check
-   `systemctl list-unit-files | grep ydotool` or `man ydotoold` — some
-   packagings require running `ydotoold &` manually instead.
-3. Give your user permission to read keyboard events (`evdev` needs this to
-   detect Right Ctrl):
+3. By default `ydotoold` creates its socket at `/tmp/.ydotool_socket` owned
+   `root:root` with mode `0600` — unreadable by your user. Override it to be
+   group-accessible by `input` (the same group used for hotkey detection
+   below):
+   ```
+   sudo systemctl edit ydotool.service
+   ```
+   In the editor that opens, add:
+   ```
+   [Service]
+   ExecStart=
+   ExecStart=/usr/bin/ydotoold --socket-perm=0660 --socket-own=root:input
+   ```
+   Then:
+   ```
+   sudo systemctl daemon-reload
+   sudo systemctl restart ydotool.service
+   ```
+   `speech_typing/config.py` already points at `/tmp/.ydotool_socket`
+   explicitly (`YDOTOOL_SOCKET`), since the `ydotool` client's own built-in
+   default path doesn't match where the daemon actually listens.
+4. Give your user permission to read keyboard events (`evdev` needs this to
+   detect Right Ctrl) and to use the `ydotool` socket above:
    ```
    sudo usermod -aG input $USER
    ```
-   Log out and back in for the group change to take effect.
-4. Make sure your user can write to `/dev/uinput` (needed by `ydotool`).
-   Check with `ls -l /dev/uinput`; if your user isn't in the owning group,
-   add a udev rule, e.g. `/etc/udev/rules.d/99-uinput.rules`:
-   ```
-   KERNEL=="uinput", GROUP="input", MODE="0660"
-   ```
-   then `sudo udevadm control --reload-rules && sudo udevadm trigger`.
+   Log out and back in (or run `newgrp input` in the terminal you'll use)
+   for the group change to take effect.
 
 ## Python setup
 
@@ -72,6 +85,40 @@ python3 run.py
 
 Hold Right Ctrl, speak, release. The transcribed text is typed at the current
 cursor position after a moment.
+
+## Testing
+
+**1. Automated tests** — cover config, transcription (real end-to-end run
+against `samples/jfk.wav`), and error paths. They deliberately never call
+`ydotool type`, since that would inject real keystrokes into whichever
+window has focus on the machine running the suite:
+```
+cd voice-project
+source .venv/bin/activate
+pytest -v
+```
+
+**2. Manual smoke tests of each piece in isolation**, useful for narrowing
+down which layer is broken:
+```
+# typing backend only — click into a text field first, then run:
+export YDOTOOL_SOCKET=/tmp/.ydotool_socket
+ydotool type -- "hello from ydotool"
+
+# transcription only — no mic/hotkey involved:
+./build/bin/whisper-cli -m models/ggml-base.bin -f samples/jfk.wav -nt -np -l en
+```
+
+**3. Full end-to-end test:**
+```
+python3 run.py
+```
+Click into a text editor (e.g. gedit, kate, or a terminal), hold Right Ctrl,
+say a short sentence, release, and watch the logs: `Recording started` →
+`Recording finished` → `Transcribing` → `Typing text: ...` → `Completed`.
+Confirm the typed text lands in the focused window and matches what you said.
+Also test releasing Right Ctrl almost immediately (under 300ms) — it should
+log a "discarded" warning and type nothing.
 
 ## Troubleshooting
 
