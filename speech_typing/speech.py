@@ -6,6 +6,9 @@ so capture is exposed as start/stop rather than a single blocking call.
 
 from __future__ import annotations
 
+import glob
+import os
+import tempfile
 from pathlib import Path
 from typing import List, Optional
 
@@ -13,27 +16,46 @@ import numpy as np
 import sounddevice as sd
 import soundfile as sf
 
-from .utils import MicrophoneNotFoundError
+from .exceptions import MicrophoneNotFoundError
+
+
+def cleanup_stale_temp_files(directory: Path, filename_prefix: str) -> None:
+    """Remove leftover recordings from a previous run that crashed before
+    cleaning up after itself. Safe to call even if the directory is empty
+    or doesn't exist yet.
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    for path in glob.glob(str(directory / f"{filename_prefix}*.wav")):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
 
 class AudioRecorder:
-    """Captures microphone audio into memory while active, then saves it to disk."""
+    """Captures microphone audio into memory while active, then saves it to a
+    uniquely-named file on disk -- avoids collisions if cleanup runs while a
+    file is still being written, and makes stale-file cleanup unambiguous.
+    """
 
     def __init__(
         self,
         sample_rate: int,
         channels: int,
-        output_path: Path,
+        output_dir: Path,
+        filename_prefix: str,
         min_duration_ms: int,
     ) -> None:
         self._sample_rate = sample_rate
         self._channels = channels
-        self._output_path = output_path
+        self._output_dir = output_dir
+        self._filename_prefix = filename_prefix
         self._min_duration_ms = min_duration_ms
         self._stream: Optional[sd.InputStream] = None
         self._frames: List[np.ndarray] = []
         self._recording = False
 
+        self._output_dir.mkdir(parents=True, exist_ok=True)
         self._verify_microphone()
 
     def _verify_microphone(self) -> None:
@@ -63,7 +85,7 @@ class AudioRecorder:
         self._recording = True
 
     def stop(self) -> Optional[Path]:
-        """Stop capturing and write the result to disk.
+        """Stop capturing and write the result to a new uniquely-named file.
 
         Returns the path to the saved WAV file, or None if there was nothing
         to save or the recording was shorter than the configured minimum
@@ -85,5 +107,10 @@ class AudioRecorder:
         if duration_ms < self._min_duration_ms:
             return None
 
-        sf.write(str(self._output_path), audio, self._sample_rate, subtype="PCM_16")
-        return self._output_path
+        fd, path_str = tempfile.mkstemp(
+            suffix=".wav", prefix=self._filename_prefix, dir=str(self._output_dir)
+        )
+        os.close(fd)
+        output_path = Path(path_str)
+        sf.write(str(output_path), audio, self._sample_rate, subtype="PCM_16")
+        return output_path

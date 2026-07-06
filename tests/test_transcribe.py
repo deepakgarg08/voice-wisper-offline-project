@@ -4,7 +4,7 @@ import pytest
 
 from speech_typing import config
 from speech_typing.transcribe import Transcriber
-from speech_typing.utils import ModelNotFoundError, WhisperExecutableNotFoundError
+from speech_typing.exceptions import ModelNotFoundError, WhisperExecutableNotFoundError
 
 SAMPLE_WAV = config.WHISPER_DIR / "samples" / "jfk.wav"
 

@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "speech-typing"
+version = "0.2.0"
+description = "Offline push-to-talk dictation for Linux, backed by whisper.cpp"
+requires-python = ">=3.10"
+dependencies = [
+    "sounddevice>=0.4.6",
+    "soundfile>=0.12.1",
+    "numpy>=1.24",
+    "evdev>=1.6",
+]
+
+[project.scripts]
+speech-typing = "speech_typing.main:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools]
+packages = ["speech_typing"]

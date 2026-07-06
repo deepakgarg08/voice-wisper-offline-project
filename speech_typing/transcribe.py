@@ -6,7 +6,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from .utils import ModelNotFoundError, NoSpeechDetectedError, WhisperExecutableNotFoundError
+from .exceptions import ModelNotFoundError, NoSpeechDetectedError, WhisperExecutableNotFoundError
 
 
 class Transcriber:

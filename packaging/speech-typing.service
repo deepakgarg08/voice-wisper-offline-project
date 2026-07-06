@@ -1,0 +1,14 @@
+[Unit]
+Description=Speech Typing - offline push-to-talk dictation
+After=graphical-session.target
+
+[Service]
+# Dev-mode path -- once packaged (pip install .), replace with the
+# `speech-typing` console-script entry point instead, e.g.:
+#   ExecStart=%h/.local/bin/speech-typing
+ExecStart=%h/whisper.cpp/voice-project/.venv/bin/python3 %h/whisper.cpp/voice-project/run.py
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target
