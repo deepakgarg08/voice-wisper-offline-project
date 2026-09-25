@@ -88,7 +88,7 @@ TRANSCRIPTION_MODE = user_config.TRANSCRIPTION_MODE
 HOTKEYS: List[HotkeySpec] = [
     HotkeySpec(
         name="toggle",
-        keys=("KEY_RIGHTCTRL",),
+        keys=("KEY_SPACE", "KEY_RIGHTCTRL"),
         behavior="toggle",
         enabled=user_config.TOGGLE_HOTKEY_ENABLED,
     ),

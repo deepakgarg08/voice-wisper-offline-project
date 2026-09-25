@@ -35,7 +35,7 @@ def test_validate_rejects_missing_model_file(monkeypatch):
 
 
 def test_validate_rejects_all_hotkeys_disabled(monkeypatch):
-    monkeypatch.setattr(config, "HOTKEYS", [HotkeySpec(name="primary", keys=("KEY_RIGHTCTRL",), enabled=False)])
+    monkeypatch.setattr(config, "HOTKEYS", [HotkeySpec(name="primary", keys=("KEY_SPACE", "KEY_RIGHTCTRL",), enabled=False)])
     with pytest.raises(ConfigError, match="HOTKEYS"):
         config.validate()
 
