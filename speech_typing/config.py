@@ -1,105 +1,150 @@
-"""Central configuration for the speech_typing app.
-
-To switch models, change MODEL below to "tiny", "base", or "small" — the
-ggml model file path is derived automatically from WHISPER_DIR.
-
-validate() is called once at startup (see app.py) and raises ConfigError
-listing every problem found, rather than failing on the first one.
-"""
+"""Runtime configuration derived from user_config.py and the host system."""
 
 from __future__ import annotations
 
 import os
+import platform
 import tempfile
 from pathlib import Path
 from typing import List
 
+from . import user_config
 from .exceptions import ConfigError
 from .hotkeys import HotkeySpec
 
+# Project root: .../voice-project
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+TOGGLE_HOTKEY_ENABLED = user_config.TOGGLE_HOTKEY_ENABLED
+PUSH_TO_TALK_HOTKEY_ENABLED = user_config.PUSH_TO_TALK_HOTKEY_ENABLED
 # --- whisper.cpp location ---
-# Overridable via env var so this can be packaged (RPM/Flatpak) without a
-# hardcoded path baked into the source -- the default matches this dev setup.
-WHISPER_DIR = Path(
-    os.environ.get(
-        "SPEECH_TYPING_WHISPER_DIR",
-        "/mnt/shared4/LLAMACPP/models/wisperalternative/whisper.cpp",
-    )
-)
+# Current layout:
+#   whisper.cpp/
+#     build/bin/whisper-cli
+#     models/
+#     voice-project/
+#
+# The environment variable allows a different layout on another machine.
+_env_whisper_dir = os.environ.get("SPEECH_TYPING_WHISPER_DIR")
+if _env_whisper_dir:
+    WHISPER_DIR = Path(_env_whisper_dir).expanduser()
+elif (PROJECT_ROOT / "whisper.cpp").is_dir():
+    WHISPER_DIR = PROJECT_ROOT / "whisper.cpp"
+else:
+    WHISPER_DIR = PROJECT_ROOT.parent
+
 WHISPER_CLI = WHISPER_DIR / "build" / "bin" / "whisper-cli"
 MODELS_DIR = WHISPER_DIR / "models"
 
-# --- model selection ---
-_KNOWN_MODELS = {"tiny", "base", "small"}
-MODEL = "base"  # one of: "tiny", "base", "small"
+KNOWN_MODELS = {"tiny", "base", "small", "medium", "large"}
+MODEL_FILE_NAMES = {
+    "tiny": "ggml-tiny.bin",
+    "base": "ggml-base.bin",
+    "small": "ggml-small.bin",
+    "medium": "ggml-medium.bin",
+    "large": "ggml-large-v3.bin",
+}
+
+MODEL = user_config.MODEL
 
 
 def model_path(model: str = MODEL) -> Path:
-    """Resolve the ggml model file path for the given model name."""
-    return MODELS_DIR / f"ggml-{model}.bin"
+    try:
+        filename = MODEL_FILE_NAMES[model]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported model: {model}") from exc
+    return MODELS_DIR / filename
 
 
 MODEL_PATH = model_path(MODEL)
 
 # --- audio recording ---
-SAMPLE_RATE = 16000  # Hz, matches whisper.cpp's expected input format
+SAMPLE_RATE = 16000
 CHANNELS = 1
-MIN_RECORDING_DURATION_MS = 300  # shorter recordings are discarded (accidental taps)
-MAX_RECORDING_DURATION_S = 60  # recording auto-stops if held this long
+MIN_RECORDING_DURATION_MS = 300
+MAX_RECORDING_DURATION_S = user_config.MAX_RECORDING_DURATION_S
 
-# Per-session scratch directory (cleared automatically by the OS/logind on
-# logout, unlike a fixed path under /tmp) for the WAV file of each utterance.
-TEMP_AUDIO_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", tempfile.gettempdir())) / "speech_typing"
+TEMP_AUDIO_DIR = Path(
+    os.environ.get("XDG_RUNTIME_DIR", tempfile.gettempdir())
+) / "speech_typing"
 TEMP_AUDIO_PREFIX = "recording_"
 
+# --- permanent project data ---
+_recordings_root = Path(user_config.RECORDINGS_ASSETS_DIR)
+RECORDINGS_ASSETS_DIR = (
+    _recordings_root if _recordings_root.is_absolute()
+    else PROJECT_ROOT / _recordings_root
+)
+AUDIO_DIR = RECORDINGS_ASSETS_DIR / "RECORDINGS"
+TRANSCRIPT_DIR = RECORDINGS_ASSETS_DIR / "TRANSCRIPTS"
+SAVE_AUDIO = user_config.SAVE_AUDIO
+SAVE_TRANSCRIPT = user_config.SAVE_TRANSCRIPT
+
 # --- transcription ---
-LANGUAGE = "en"  # or "auto" to auto-detect the spoken language
+LANGUAGE = user_config.LANGUAGE
+TRANSCRIPTION_MODE = user_config.TRANSCRIPTION_MODE
 
 # --- hotkeys ---
-# A hotkey engages the instant every listed key is held, and disengages the
-# instant any one of them is released -- so a chord like the secondary one
-# below behaves as press-all-hold-release, same as the single-key primary.
 HOTKEYS: List[HotkeySpec] = [
-    HotkeySpec(name="primary", keys=("KEY_RIGHTCTRL",), enabled=True),
-    HotkeySpec(name="secondary", keys=("KEY_LEFTCTRL", "KEY_LEFTALT", "KEY_SPACE"), enabled=True),
+    HotkeySpec(
+        name="toggle",
+        keys=("KEY_RIGHTCTRL",),
+        behavior="toggle",
+        enabled=user_config.TOGGLE_HOTKEY_ENABLED,
+    ),
+    HotkeySpec(
+        name="push_to_talk",
+        keys=("KEY_LEFTCTRL", "KEY_LEFTMETA"),
+        behavior="push_to_talk",
+        enabled=user_config.PUSH_TO_TALK_HOTKEY_ENABLED,
+    ),
 ]
-HOTKEY_DEBOUNCE_MS = 75  # ignore a hotkey re-engaging this soon after it last disengaged
+HOTKEY_DEBOUNCE_MS = 75
 
 # --- typing ---
-TYPING_BACKEND = "auto"  # "auto", "ydotool", "xdotool", or "wtype"
-YDOTOOL_KEY_DELAY_MS = 0  # per-keystroke delay in ms, 0 = ydotool's own default
-# ydotoold's default socket path; the ydotool client's own compiled-in default
-# (/run/user/<uid>/.ydotool_socket) doesn't match this, so it must be passed
-# explicitly rather than relying on the client's guess.
-YDOTOOL_SOCKET = Path("/tmp/.ydotool_socket")
+TYPING_BACKEND = user_config.TYPING_BACKEND
 TYPING_MAX_RETRIES = 3
 TYPING_RETRY_DELAY_S = 0.3
-CLIPBOARD_FALLBACK_ENABLED = True  # copy to clipboard if typing fails after all retries
+CLIPBOARD_FALLBACK_ENABLED = user_config.CLIPBOARD_FALLBACK_ENABLED
+
+# Optional legacy Linux backends. These are not required when
+# python_clipboard works.
+YDOTOOL_KEY_DELAY_MS = 0
+YDOTOOL_SOCKET = Path(
+    os.environ.get(
+        "YDOTOOL_SOCKET",
+        str(Path("/run/user") / str(os.getuid()) / ".ydotool_socket")
+        if hasattr(os, "getuid")
+        else "",
+    )
+) if platform.system() != "Windows" else None
 
 # --- desktop feedback ---
-NOTIFICATIONS_ENABLED = True
-SOUND_EFFECTS_ENABLED = True
+NOTIFICATIONS_ENABLED = user_config.NOTIFICATIONS_ENABLED
+SOUND_EFFECTS_ENABLED = user_config.SOUND_EFFECTS_ENABLED
 _SOUND_THEME_DIR = Path("/usr/share/sounds/freedesktop/stereo")
 SOUND_RECORDING_START = _SOUND_THEME_DIR / "message-new-instant.oga"
 SOUND_RECORDING_STOP = _SOUND_THEME_DIR / "complete.oga"
 
 # --- logging ---
 LOG_LEVEL = "INFO"
-LOG_DIR = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state")) / "speech_typing"
+if platform.system() == "Windows":
+    _state_base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+else:
+    _state_base = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state"))
+LOG_DIR = _state_base / "speech_typing"
 LOG_FILE = LOG_DIR / "speech_typing.log"
 LOG_MAX_BYTES = 1_000_000
 LOG_BACKUP_COUNT = 3
 
 
 def validate() -> None:
-    """Validate configuration, raising ConfigError listing every problem found."""
     problems: List[str] = []
 
-    if MODEL not in _KNOWN_MODELS:
-        problems.append(f"MODEL must be one of {sorted(_KNOWN_MODELS)}, got {MODEL!r}")
+    if MODEL not in KNOWN_MODELS:
+        problems.append(f"MODEL must be one of {sorted(KNOWN_MODELS)}, got {MODEL!r}")
     if not WHISPER_CLI.is_file():
         problems.append(f"whisper-cli executable not found at: {WHISPER_CLI}")
-    elif not os.access(WHISPER_CLI, os.X_OK):
+    elif platform.system() != "Windows" and not os.access(WHISPER_CLI, os.X_OK):
         problems.append(f"whisper-cli at {WHISPER_CLI} is not executable")
     if not MODEL_PATH.is_file():
         problems.append(f"Model file not found: {MODEL_PATH}")
@@ -117,15 +162,20 @@ def validate() -> None:
 
     if not LANGUAGE:
         problems.append("LANGUAGE must not be empty")
+    if TRANSCRIPTION_MODE not in ("original", "translate_en"):
+        problems.append("TRANSCRIPTION_MODE must be 'original' or 'translate_en'")
 
     if not any(h.enabled for h in HOTKEYS):
-        problems.append("At least one entry in HOTKEYS must be enabled")
+        problems.append("At least one hotkey must be enabled")
     if HOTKEY_DEBOUNCE_MS < 0:
         problems.append("HOTKEY_DEBOUNCE_MS must not be negative")
 
-    if TYPING_BACKEND not in ("auto", "ydotool", "xdotool", "wtype"):
+    if TYPING_BACKEND not in (
+        "auto", "python_clipboard", "ydotool", "xdotool", "wtype"
+    ):
         problems.append(
-            f"TYPING_BACKEND must be 'auto', 'ydotool', 'xdotool', or 'wtype', got {TYPING_BACKEND!r}"
+            "TYPING_BACKEND must be 'auto', 'python_clipboard', 'ydotool', "
+            "'xdotool', or 'wtype'"
         )
     if TYPING_MAX_RETRIES < 1:
         problems.append("TYPING_MAX_RETRIES must be at least 1")
@@ -134,8 +184,13 @@ def validate() -> None:
 
     try:
         TEMP_AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+        if SAVE_AUDIO:
+            AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+        if SAVE_TRANSCRIPT:
+            TRANSCRIPT_DIR.mkdir(parents=True, exist_ok=True)
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
-        problems.append(f"TEMP_AUDIO_DIR ({TEMP_AUDIO_DIR}) is not usable: {exc}")
+        problems.append(f"Unable to create application data directories: {exc}")
 
     if problems:
         raise ConfigError("Invalid configuration:\n  - " + "\n  - ".join(problems))

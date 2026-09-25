@@ -22,6 +22,7 @@ from .hotkeys import HotkeyListener
 from .notifications import Notifier
 from .pipeline import SpeechPipeline
 from .sound import SoundPlayer
+from .storage import DailyTranscriptStore, RecordingStore
 from .speech import AudioRecorder, cleanup_stale_temp_files
 from .transcribe import Transcriber
 from .typing_backends import select_typing_backend
@@ -47,6 +48,8 @@ class Application:
             key_delay_ms=config.YDOTOOL_KEY_DELAY_MS,
         )
         logger.info("Using typing backend: %s", backend.name)
+        self._typing_backend_name = backend.name
+        self._print_configuration()
 
         clipboard = ClipboardFallback(session_type) if config.CLIPBOARD_FALLBACK_ENABLED else None
         self._typing_service = TypingService(
@@ -70,12 +73,19 @@ class Application:
             whisper_cli=config.WHISPER_CLI,
             model_path=config.MODEL_PATH,
             language=config.LANGUAGE,
+            mode=config.TRANSCRIPTION_MODE,
+        )
+        recording_store = RecordingStore(config.AUDIO_DIR, enabled=config.SAVE_AUDIO)
+        transcript_store = DailyTranscriptStore(
+            config.TRANSCRIPT_DIR, enabled=config.SAVE_TRANSCRIPT
         )
         self._pipeline = SpeechPipeline(
             recorder=recorder,
             transcriber=transcriber,
             typing_service=self._typing_service,
             max_recording_duration_s=config.MAX_RECORDING_DURATION_S,
+            recording_store=recording_store,
+            transcript_store=transcript_store,
             on_event=self._handle_pipeline_event,
         )
 
@@ -84,6 +94,7 @@ class Application:
             debounce_ms=config.HOTKEY_DEBOUNCE_MS,
             on_engage=self._pipeline.handle_hotkey_down,
             on_disengage=self._pipeline.handle_hotkey_up,
+            on_toggle=self._pipeline.handle_toggle,
         )
 
     def run(self) -> None:
@@ -98,6 +109,32 @@ class Application:
             self._hotkeys.listen_forever()
         finally:
             self._shutdown()
+
+    def _print_configuration(self) -> None:
+        mode_text = (
+            "TRANSLATE TO ENGLISH"
+            if config.TRANSCRIPTION_MODE == "translate_en"
+            else "ORIGINAL SPOKEN LANGUAGE"
+        )
+        print("\n" + "=" * 72)
+        print("SPEECH TYPING CONFIGURATION")
+        print("=" * 72)
+        print(f"Whisper model       : {config.MODEL}")
+        print(f"Model file          : {config.MODEL_PATH}")
+        print(f"Whisper language    : {config.LANGUAGE}")
+        print(f"Transcription mode  : {config.TRANSCRIPTION_MODE} ({mode_text})")
+        print(f"Max recording       : {config.MAX_RECORDING_DURATION_S} seconds")
+        print(f"Save audio          : {config.SAVE_AUDIO}")
+        print(f"Save transcripts    : {config.SAVE_TRANSCRIPT}")
+        print(f"Recordings folder   : {config.AUDIO_DIR}")
+        print(f"Transcript folder   : {config.TRANSCRIPT_DIR}")
+        print(f"Typing backend cfg  : {config.TYPING_BACKEND}")
+        print(f"Typing backend used : {getattr(self, '_typing_backend_name', 'not selected yet')}")
+        print(f"Clipboard fallback  : {config.CLIPBOARD_FALLBACK_ENABLED}")
+        print(f"Project root       : {config.PROJECT_ROOT}")
+        print(f"Toggle hotkey       : {'ON' if config.TOGGLE_HOTKEY_ENABLED else 'OFF'} (Right Ctrl)")
+        print(f"Push-to-talk        : {'ON' if config.PUSH_TO_TALK_HOTKEY_ENABLED else 'OFF'} (Left Ctrl + Left Super)")
+        print("=" * 72 + "\n", flush=True)
 
     def _handle_signal(self, signum: int, frame: Optional[FrameType]) -> None:
         logger.info("Received signal %s, shutting down gracefully", signum)
@@ -122,10 +159,15 @@ class Application:
             )
         elif event is PipelineEvent.TRANSCRIBING:
             logger.info("Transcribing")
+            self._notifier.notify("Speech Typing", "Transcribing...")
         elif event is PipelineEvent.TYPING:
             logger.info("Typing text: %s", data.get("text"))
         elif event is PipelineEvent.COMPLETED:
+            text = data.get("text") or ""
             logger.info("Completed")
+            if text:
+                logger.info("TRANSCRIPTION RESULT: %s", text)
+                logger.debug("Transcript saved and typing completed")
         elif event is PipelineEvent.TYPING_FAILED_CLIPBOARD_FALLBACK:
             logger.warning("Typing failed, copied to clipboard instead")
             self._notifier.notify(

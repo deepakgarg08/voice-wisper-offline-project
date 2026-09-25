@@ -30,6 +30,7 @@ class HotkeySpec:
 
     name: str
     keys: Sequence[str]  # evdev key names, e.g. ("KEY_LEFTCTRL", "KEY_LEFTALT", "KEY_SPACE")
+    behavior: str = "push_to_talk"  # "push_to_talk" or "toggle"
     enabled: bool = True
 
 
@@ -85,6 +86,7 @@ class HotkeyListener:
         debounce_ms: int,
         on_engage: HotkeyCallback,
         on_disengage: HotkeyCallback,
+        on_toggle: HotkeyCallback,
     ) -> None:
         enabled = [h for h in hotkeys if h.enabled]
         if not enabled:
@@ -97,6 +99,11 @@ class HotkeyListener:
         self._debounce_ms = debounce_ms
         self._on_engage = on_engage
         self._on_disengage = on_disengage
+        self._on_toggle = on_toggle
+        self._behaviors: Dict[str, str] = {h.name: h.behavior for h in enabled}
+        invalid = {h.behavior for h in enabled} - {"push_to_talk", "toggle"}
+        if invalid:
+            raise ValueError(f"Unsupported hotkey behavior(s): {sorted(invalid)}")
 
         self._pressed: Set[int] = set()
         self._engaged: Set[str] = set()
@@ -144,8 +151,12 @@ class HotkeyListener:
                     logger.debug("Ignoring bounced re-engage of hotkey %r", name)
                     continue
                 self._engaged.add(name)
-                self._on_engage(name)
+                if self._behaviors[name] == "toggle":
+                    self._on_toggle(name)
+                else:
+                    self._on_engage(name)
             elif not fully_pressed and name in self._engaged:
                 self._engaged.discard(name)
                 self._last_disengage_at[name] = now
-                self._on_disengage(name)
+                if self._behaviors[name] == "push_to_talk":
+                    self._on_disengage(name)
