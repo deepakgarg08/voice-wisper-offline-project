@@ -37,6 +37,10 @@ PUSH_TO_TALK_HOTKEY_ENABLED = True
 NOTIFICATIONS_ENABLED = True
 SOUND_EFFECTS_ENABLED = True
 
+# 0.0 = silent, 1.0 = normal system playback volume.
+# 0.15 gives a quiet recording start/stop sound.
+SOUND_VOLUME = 0.15
+
 # ---------------------------------------------------------------------------
 # Typing
 # ---------------------------------------------------------------------------

@@ -16,6 +16,7 @@ from .hotkeys import HotkeySpec
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 TOGGLE_HOTKEY_ENABLED = user_config.TOGGLE_HOTKEY_ENABLED
 PUSH_TO_TALK_HOTKEY_ENABLED = user_config.PUSH_TO_TALK_HOTKEY_ENABLED
+
 # --- whisper.cpp location ---
 # Current layout:
 #   whisper.cpp/
@@ -121,6 +122,7 @@ YDOTOOL_SOCKET = Path(
 # --- desktop feedback ---
 NOTIFICATIONS_ENABLED = user_config.NOTIFICATIONS_ENABLED
 SOUND_EFFECTS_ENABLED = user_config.SOUND_EFFECTS_ENABLED
+SOUND_VOLUME = user_config.SOUND_VOLUME
 _SOUND_THEME_DIR = Path("/usr/share/sounds/freedesktop/stereo")
 SOUND_RECORDING_START = _SOUND_THEME_DIR / "message-new-instant.oga"
 SOUND_RECORDING_STOP = _SOUND_THEME_DIR / "complete.oga"

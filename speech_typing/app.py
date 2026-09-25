@@ -60,7 +60,10 @@ class Application:
         )
 
         self._notifier = Notifier(enabled=config.NOTIFICATIONS_ENABLED)
-        self._sound = SoundPlayer(enabled=config.SOUND_EFFECTS_ENABLED)
+        self._sound = SoundPlayer(
+            enabled=config.SOUND_EFFECTS_ENABLED,
+            volume=config.SOUND_VOLUME,
+        )
 
         recorder = AudioRecorder(
             sample_rate=config.SAMPLE_RATE,
