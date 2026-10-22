@@ -1,7 +1,23 @@
+# Python
 .venv/
+venv/
 __pycache__/
-*.pyc
-.pytest_cache/
-*.wav
+*.py[cod]
 *.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+
+# Local data / secrets
 RECORDINGS-ASSETS/
+*.wav
+*.log
+.env
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
