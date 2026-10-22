@@ -21,4 +21,4 @@ Full description: `docs/PROJECT.md`. Latency design: `docs/STREAMING.md`.
 ## Workflow
 - Commit in small steps. Never commit `RECORDINGS-ASSETS/`, `.venv/`, or `*.wav`.
 - Live hotkey/mic/typing flow can't be exercised without a user present; unit tests mock those.
-- Known baseline: some older tests in `tests/` were stale before the streaming work (see git history).
+- Known baseline: ~14 older tests (hotkeys, typing_backends, config) were already stale before the streaming work.

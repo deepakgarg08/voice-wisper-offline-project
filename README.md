@@ -226,3 +226,8 @@ immediately (under 300ms, should log "discarded") and holding past 60s
 | "Is ydotoold running, and is its socket readable?" | See system setup steps 2–3 above |
 | "Found input devices but could not open any of them" | See system setup step 4 above |
 | Typing failed, copied to clipboard instead | All retries failed — paste manually; check `ydotoold` is actually running |
+
+## Low-latency streaming
+
+By default audio is transcribed in chunks while you speak, using a warm `whisper-server`; see
+`docs/STREAMING.md`. Disable with `STREAMING_ENABLED = False` in `speech_typing/user_config.py`.
