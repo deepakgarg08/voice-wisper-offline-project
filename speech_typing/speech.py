@@ -54,6 +54,7 @@ class AudioRecorder:
         self._stream: Optional[sd.InputStream] = None
         self._frames: List[np.ndarray] = []
         self._recording = False
+        self.last_audio: Optional[np.ndarray] = None  # full audio of the last stop()
 
         self._output_dir.mkdir(parents=True, exist_ok=True)
         self._verify_microphone()
@@ -69,6 +70,17 @@ class AudioRecorder:
 
     def _callback(self, indata: np.ndarray, frames: int, time_info, status) -> None:
         self._frames.append(indata.copy())
+
+    def get_audio(self, start: int = 0) -> np.ndarray:
+        """Mono int16 samples recorded so far, from sample index `start` on.
+
+        Safe to call from another thread while recording.
+        """
+        frames = list(self._frames)
+        if not frames:
+            return np.zeros(0, dtype=np.int16)
+        audio = np.concatenate(frames, axis=0).reshape(-1, self._channels)[:, 0]
+        return audio[start:]
 
     def start(self) -> None:
         """Begin capturing audio. No-op if already recording."""
@@ -98,13 +110,16 @@ class AudioRecorder:
         self._stream.close()
         self._stream = None
         self._recording = False
+        self.last_audio = None
 
         if not self._frames:
             return None
 
         audio = np.concatenate(self._frames, axis=0)
+        self.last_audio = audio.reshape(-1, self._channels)[:, 0]
         duration_ms = (len(audio) / self._sample_rate) * 1000
         if duration_ms < self._min_duration_ms:
+            self.last_audio = None
             return None
 
         fd, path_str = tempfile.mkstemp(

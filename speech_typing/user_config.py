@@ -59,3 +59,26 @@ TYPING_BACKEND = "auto"
 # If every typing backend fails, keep the old safe fallback of copying the
 # result to the clipboard.
 CLIPBOARD_FALLBACK_ENABLED = True
+
+# ---------------------------------------------------------------------------
+# Streaming ASR (low latency)
+# ---------------------------------------------------------------------------
+
+# Keep a warm whisper-server running and transcribe the recording in chunks
+# *while you speak*, so only the last short chunk is left after release.
+# Falls back to whisper-cli per utterance if the server cannot start.
+STREAMING_ENABLED = True
+WHISPER_THREADS = 6
+
+# Chunks are cut at pauses: at least STREAM_MIN_CHUNK_S long, ending after
+# STREAM_SILENCE_MS of quiet; forced cut at STREAM_MAX_CHUNK_S.
+STREAM_MIN_CHUNK_S = 2.0
+STREAM_MAX_CHUNK_S = 8.0
+STREAM_SILENCE_MS = 400
+
+# Feed the end of the previous chunk to whisper as context (better continuity).
+STREAM_USE_PROMPT = True
+
+# False: type everything at once on release (safe with held modifier keys).
+# True: type each chunk as soon as it is recognised, while still recording.
+STREAM_TYPE_WHILE_RECORDING = False

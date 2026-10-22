@@ -23,7 +23,10 @@ from .notifications import Notifier
 from .pipeline import SpeechPipeline
 from .sound import SoundPlayer
 from .storage import DailyTranscriptStore, RecordingStore
+from .chunker import SilenceChunker
 from .speech import AudioRecorder, cleanup_stale_temp_files
+from .streaming import StreamingSession
+from .whisper_server import WhisperServerTranscriber
 from .transcribe import Transcriber
 from .typing_backends import select_typing_backend
 from .typing_service import TypingService
@@ -78,6 +81,8 @@ class Application:
             language=config.LANGUAGE,
             mode=config.TRANSCRIPTION_MODE,
         )
+        self._server = self._start_streaming_server()
+        session_factory = self._make_session_factory() if self._server else None
         recording_store = RecordingStore(config.AUDIO_DIR, enabled=config.SAVE_AUDIO)
         transcript_store = DailyTranscriptStore(
             config.TRANSCRIPT_DIR, enabled=config.SAVE_TRANSCRIPT
@@ -90,6 +95,8 @@ class Application:
             recording_store=recording_store,
             transcript_store=transcript_store,
             on_event=self._handle_pipeline_event,
+            session_factory=session_factory,
+            type_while_recording=config.STREAM_TYPE_WHILE_RECORDING,
         )
 
         self._hotkeys = HotkeyListener(
@@ -99,6 +106,45 @@ class Application:
             on_disengage=self._pipeline.handle_hotkey_up,
             on_toggle=self._pipeline.handle_toggle,
         )
+
+    def _start_streaming_server(self) -> Optional[WhisperServerTranscriber]:
+        if not config.STREAMING_ENABLED:
+            return None
+        try:
+            server = WhisperServerTranscriber(
+                server_bin=config.WHISPER_SERVER,
+                model_path=config.MODEL_PATH,
+                language=config.LANGUAGE,
+                translate=config.TRANSCRIPTION_MODE == "translate_en",
+                threads=config.WHISPER_THREADS,
+                sample_rate=config.SAMPLE_RATE,
+                audio_ctx=config.STREAM_AUDIO_CTX,
+            )
+            server.start()
+            return server
+        except Exception as exc:
+            logger.warning("Streaming ASR unavailable, using whisper-cli per utterance: %s", exc)
+            return None
+
+    def _make_session_factory(self):
+        server = self._server
+
+        def factory(recorder: AudioRecorder, on_text) -> StreamingSession:
+            chunker = SilenceChunker(
+                sample_rate=config.SAMPLE_RATE,
+                min_chunk_s=config.STREAM_MIN_CHUNK_S,
+                max_chunk_s=config.STREAM_MAX_CHUNK_S,
+                silence_ms=config.STREAM_SILENCE_MS,
+            )
+            return StreamingSession(
+                transcriber=server,
+                chunker=chunker,
+                get_audio=recorder.get_audio,
+                on_text=on_text,
+                use_prompt=config.STREAM_USE_PROMPT,
+            )
+
+        return factory
 
     def run(self) -> None:
         signal.signal(signal.SIGINT, self._handle_signal)
@@ -126,6 +172,7 @@ class Application:
         print(f"Model file          : {config.MODEL_PATH}")
         print(f"Whisper language    : {config.LANGUAGE}")
         print(f"Transcription mode  : {config.TRANSCRIPTION_MODE} ({mode_text})")
+        print(f"Streaming ASR       : {'ON' if config.STREAMING_ENABLED else 'OFF'}")
         print(f"Max recording       : {config.MAX_RECORDING_DURATION_S} seconds")
         print(f"Save audio          : {config.SAVE_AUDIO}")
         print(f"Save transcripts    : {config.SAVE_TRANSCRIPT}")
@@ -146,6 +193,8 @@ class Application:
     def _shutdown(self) -> None:
         logger.info("Shutting down...")
         self._pipeline.shutdown()
+        if self._server is not None:
+            self._server.stop()
         logger.info("Shutdown complete.")
 
     def _handle_pipeline_event(self, event: PipelineEvent, data: dict) -> None:

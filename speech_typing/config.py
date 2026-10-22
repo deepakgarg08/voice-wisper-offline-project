@@ -34,6 +34,7 @@ else:
     WHISPER_DIR = PROJECT_ROOT.parent
 
 WHISPER_CLI = WHISPER_DIR / "build" / "bin" / "whisper-cli"
+WHISPER_SERVER = WHISPER_DIR / "build" / "bin" / "whisper-server"
 MODELS_DIR = WHISPER_DIR / "models"
 
 KNOWN_MODELS = {"tiny", "base", "small", "medium", "large"}
@@ -83,6 +84,17 @@ SAVE_TRANSCRIPT = user_config.SAVE_TRANSCRIPT
 # --- transcription ---
 LANGUAGE = user_config.LANGUAGE
 TRANSCRIPTION_MODE = user_config.TRANSCRIPTION_MODE
+
+# --- streaming ASR ---
+STREAMING_ENABLED = user_config.STREAMING_ENABLED
+WHISPER_THREADS = user_config.WHISPER_THREADS
+STREAM_MIN_CHUNK_S = user_config.STREAM_MIN_CHUNK_S
+STREAM_MAX_CHUNK_S = user_config.STREAM_MAX_CHUNK_S
+STREAM_SILENCE_MS = user_config.STREAM_SILENCE_MS
+STREAM_USE_PROMPT = user_config.STREAM_USE_PROMPT
+# whisper audio context is in 20 ms units; leave 1 s headroom over the longest chunk.
+STREAM_AUDIO_CTX = int((STREAM_MAX_CHUNK_S + 1.0) * 50)
+STREAM_TYPE_WHILE_RECORDING = user_config.STREAM_TYPE_WHILE_RECORDING
 
 # --- hotkeys ---
 HOTKEYS: List[HotkeySpec] = [
@@ -166,6 +178,14 @@ def validate() -> None:
         problems.append("LANGUAGE must not be empty")
     if TRANSCRIPTION_MODE not in ("original", "translate_en"):
         problems.append("TRANSCRIPTION_MODE must be 'original' or 'translate_en'")
+
+    if STREAMING_ENABLED:
+        if WHISPER_THREADS < 1:
+            problems.append("WHISPER_THREADS must be at least 1")
+        if STREAM_MIN_CHUNK_S <= 0 or STREAM_MAX_CHUNK_S <= STREAM_MIN_CHUNK_S:
+            problems.append("STREAM_MAX_CHUNK_S must be greater than STREAM_MIN_CHUNK_S (> 0)")
+        if STREAM_SILENCE_MS < 30:
+            problems.append("STREAM_SILENCE_MS must be at least 30")
 
     if not any(h.enabled for h in HOTKEYS):
         problems.append("At least one hotkey must be enabled")

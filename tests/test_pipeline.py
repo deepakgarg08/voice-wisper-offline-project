@@ -8,7 +8,7 @@ from speech_typing.exceptions import NoSpeechDetectedError
 from speech_typing.pipeline import SpeechPipeline
 
 
-def _make_pipeline(max_recording_duration_s=60):
+def _make_pipeline(max_recording_duration_s=60, **kwargs):
     recorder = MagicMock()
     transcriber = MagicMock()
     typing_service = MagicMock()
@@ -24,7 +24,10 @@ def _make_pipeline(max_recording_duration_s=60):
         transcriber=transcriber,
         typing_service=typing_service,
         max_recording_duration_s=max_recording_duration_s,
+        recording_store=MagicMock(),
+        transcript_store=MagicMock(),
         on_event=on_event,
+        **kwargs,
     )
     pipeline.start()
     return pipeline, recorder, transcriber, typing_service, events, lock
@@ -121,3 +124,56 @@ def test_max_duration_auto_stops_recording():
 
     stopped_events = [data for e, data in events if e == PipelineEvent.RECORDING_STOPPED]
     assert any(d.get("reason") == "max_duration" for d in stopped_events)
+
+
+def test_streaming_session_text_is_typed_once_on_release(tmp_path):
+    session = MagicMock()
+    session.finish.return_value = "hello streaming world"
+    pipeline, recorder, transcriber, typing_service, events, lock = _make_pipeline(
+        session_factory=lambda rec, on_text: session
+    )
+    audio_path = tmp_path / "rec.wav"
+    audio_path.touch()
+    recorder.stop.return_value = audio_path
+    typing_service.type_text.return_value = True
+
+    pipeline.handle_hotkey_down("primary")
+    session.start.assert_called_once()
+    pipeline.handle_hotkey_up("primary")
+    _wait_for(events, lock, PipelineEvent.COMPLETED)
+    pipeline.shutdown()
+
+    transcriber.transcribe.assert_not_called()
+    typing_service.type_text.assert_called_once_with("hello streaming world")
+
+
+def test_streaming_failure_falls_back_to_whole_file(tmp_path):
+    session = MagicMock()
+    session.finish.side_effect = RuntimeError("server died")
+    pipeline, recorder, transcriber, typing_service, events, lock = _make_pipeline(
+        session_factory=lambda rec, on_text: session
+    )
+    audio_path = tmp_path / "rec.wav"
+    audio_path.touch()
+    recorder.stop.return_value = audio_path
+    transcriber.transcribe.return_value = "fallback text"
+    typing_service.type_text.return_value = True
+
+    pipeline.handle_hotkey_down("primary")
+    pipeline.handle_hotkey_up("primary")
+    _wait_for(events, lock, PipelineEvent.COMPLETED)
+    pipeline.shutdown()
+
+    typing_service.type_text.assert_called_once_with("fallback text")
+
+
+def test_discarded_recording_cancels_session():
+    session = MagicMock()
+    pipeline, recorder, *_ = _make_pipeline(session_factory=lambda rec, on_text: session)
+    recorder.stop.return_value = None
+
+    pipeline.handle_hotkey_down("primary")
+    pipeline.handle_hotkey_up("primary")
+    pipeline.shutdown()
+
+    session.cancel.assert_called_once()
