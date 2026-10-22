@@ -13,7 +13,7 @@ reasoning behind it.
 
 **What works right now, verified on this machine:**
 - Full pipeline architecture (recording → transcription → typing, with
-  retry and clipboard fallback) — 51 automated tests passing.
+  retry and clipboard fallback) — automated tests in `tests/` (run `pytest -q`).
 - All error paths (missing model, missing whisper-cli, ydotool not
   installed, keyboard permission denied, invalid config) raise clear
   messages, checked at startup via `config.validate()`.
@@ -43,7 +43,10 @@ the others (composition root):
 | `environment.py` | Wayland vs X11 session detection |
 | `hotkeys.py` | Raw evdev hotkey detection (single keys or chords), debounce |
 | `speech.py` | `AudioRecorder` (mic capture) + stale temp-file cleanup |
-| `transcribe.py` | Shells out to `whisper-cli`, returns clean text |
+| `transcribe.py` | Shells out to `whisper-cli`, returns clean text (fallback path) |
+| `whisper_server.py` | Warm `whisper-server` process + HTTP client for in-memory chunks |
+| `chunker.py` | Silence-aware cut points for live chunking (pure numpy) |
+| `streaming.py` | `StreamingSession`: transcribes chunks while you speak |
 | `typing_backends.py` | `ydotool`/`xdotool`/`wtype` backends + auto-selection |
 | `typing_service.py` | Retry policy + clipboard fallback around a backend |
 | `clipboard.py` | `wl-copy`/`xclip`/`xsel` wrapper |
@@ -178,7 +181,7 @@ typing fails after retrying).
 
 ## Testing
 
-**1. Automated tests** — 51 tests covering config validation, hotkey
+**1. Automated tests** — tests covering config validation, hotkey
 chord/debounce logic, typing-backend selection, retry/clipboard-fallback
 policy, session detection, the pipeline's business logic (mocked
 recorder/transcriber/typing), and a real end-to-end transcription run

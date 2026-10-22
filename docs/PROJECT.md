@@ -32,6 +32,12 @@ has focus. Everything runs locally on CPU via whisper.cpp; no audio leaves the m
 | `hotkeys.py`, `environment.py` | input / session detection |
 | `config.py`, `user_config.py`, `exceptions.py`, `events.py`, `logging_setup.py` | support |
 
+## Running and debugging
+- Service: `systemctl --user restart speech-typing.service`; logs via `journalctl --user -u speech-typing.service -f`.
+- Hotkeys: toggle = Space + Right Ctrl (tap to start, tap again to stop); push-to-talk = hold Left Ctrl + Left Super.
+- Tests: `.venv/bin/python -m pytest -q` (some older hotkey/backend/config tests are stale).
+- Dump live threads: `py-spy dump --pid <service pid>` (install py-spy outside the project venv).
+
 ## Hardware / constraints
 Intel i7-1265U (12 threads), 62 GB RAM, no usable GPU (iGPU only). Models: ggml tiny/base/small in
 `../models`. CPU-only, so latency work focuses on avoiding repeated model loads and overlapping

@@ -6,7 +6,7 @@ Hold a configured hotkey, speak, release — the transcription is typed into wha
 ## Current Status (checkpoint 3)
 
 **What works right now, verified on this machine:**
-- Full pipeline architecture (recording → transcription → typing, with retry and clipboard fallback) — 51 automated tests passing.
+- Full pipeline architecture (recording → transcription → typing, with retry and clipboard fallback) — covered by automated tests.
 - All error paths (missing model, missing whisper-cli, ydotool not installed, keyboard permission denied, invalid config) raise clear messages, checked at startup via `config.validate()`.
 - `ydotool`/`ydotoold` installed and running.
 
@@ -86,7 +86,7 @@ cd voice-project
 pytest -v
 ```
 
-This runs 51 tests covering config validation, hotkey logic, typing backends, retry/clipboard fallback, and end-to-end transcription.
+This runs tests covering streaming chunking and config validation, hotkey logic, typing backends, retry/clipboard fallback, and end-to-end transcription.
 
 ## Manual Smoke Tests
 
@@ -113,6 +113,7 @@ Click into a text editor, hold the primary hotkey (Right Ctrl), say a short sent
 |---------|-------|----------|
 | "Invalid configuration" | Missing model or misconfigured path | Run `./setup_and_run.sh` to fix model path and ensure whisper-cli is in PATH |
 | "No input audio device" | Microphone not accessible | Check `pavucontrol` / PipeWire routing; ensure mic is enabled |
+| Streaming silently unavailable (log: "Streaming ASR unavailable") | `whisper-server` missing at `<whisper dir>/build/bin/whisper-server` | Build whisper.cpp with its server example, or set `STREAMING_ENABLED = False` |
 | "whisper-cli executable not found" | WHISPER_DIR not pointing to built model | Set `SPEECH_TYPING_WHISPER_DIR` env var to point at your ggml model |
 | "No speech detected" | Mic not active or ydotoold not running | Run `./setup_and_run.sh` to configure ydotoold and input group |
 | "Type failure" | Clipboard fallback disabled | Edit `config.py` to enable `CLIPBOARD_FALLBACK_ENABLED = True` |
@@ -125,7 +126,10 @@ Click into a text editor, hold the primary hotkey (Right Ctrl), say a short sent
 - **`environment.py`** – Wayland vs X11 session detection
 - **`hotkeys.py`** – Raw evdev hotkey detection (single keys or chords), debounce
 - **`speech.py`** – `AudioRecorder` (mic capture) + stale temp-file cleanup
-- **`transcribe.py`** – Shells out to `whisper-cli`, returns clean text
+- **`transcribe.py`** – Shells out to `whisper-cli`, returns clean text (fallback path)
+- **`whisper_server.py`** – Warm `whisper-server` process + HTTP client for in-memory chunks
+- **`chunker.py`** – Silence-aware cut points for live chunking
+- **`streaming.py`** – Transcribes chunks in the background while you speak
 - **`typing_backends.py`** – `ydotool`/`xdotool`/`wtype` backends + auto-selection
 - **`typing_service.py`** – Retry policy + clipboard fallback around a backend
 - **`clipboard.py`** – `wl-copy`/`xclip`/`xsel` wrapper

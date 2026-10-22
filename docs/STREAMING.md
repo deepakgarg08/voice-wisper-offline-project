@@ -32,6 +32,17 @@ release ──► finish(): flush unsent tail, join worker ──► join chunk 
 - **Fallback**: if the server cannot start, or a streaming transcription fails, the pipeline uses the saved
   WAV with the per-utterance `whisper-cli` path.
 
+## Robustness decisions (from live testing)
+- **Quiet microphones**: the silence threshold is `1.6 × noise floor` (10th-percentile window RMS), clamped to
+  40–1500 (int16 scale). An earlier fixed minimum of 150 classified a quiet mic (speech peaks ~1000) as silence.
+- **No stalls**: the server runs with `-nf` (no temperature fallback; noisy chunks used to take 15–18 s) and
+  `-sns` (suppress non-speech tokens). Each HTTP request times out after 20 s, and the pipeline then falls
+  back to whole-file `whisper-cli` on the saved recording.
+- **Hallucination guard**: silent chunks are never sent; bracketed tags and one-word junk ("you") are dropped.
+- **Debugging**: `journalctl --user -u speech-typing.service -f` shows the service log, including
+  "Toggle hotkey pressed" lines. (The rotating file log under `~/.local/state/speech_typing/` may be stale
+  when the service logs to the journal.)
+
 ## Output timing
 Default `STREAM_TYPE_WHILE_RECORDING = False`: text is typed once on release (safe while modifier keys are
 still held). Set to `True` to type each chunk as soon as it is recognised.

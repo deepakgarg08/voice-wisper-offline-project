@@ -35,6 +35,9 @@ module layout in `README.md` once committed.
 
 ## Phase 2 — continuous dictation + VAD + silence detection
 
+> **Partially done (streaming ASR):** warm `whisper-server` and energy-based chunking during
+> recording are implemented; see `docs/STREAMING.md`. Silero VAD and continuous (hands-free) mode remain.
+
 **Decision: reuse whisper.cpp's own VAD rather than writing one.** It
 already ships Silero VAD support (`--vad`, `--vad-model`,
 `--vad-min-silence-duration-ms`, etc.). Continuous mode becomes: instead of
